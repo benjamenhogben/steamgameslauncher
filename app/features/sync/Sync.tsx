@@ -3,9 +3,11 @@ import { Link } from 'react-router-dom';
 import { useDispatch, useSelector } from 'react-redux';
 import styles from './Sync.css';
 import routes from '../../constants/routes.json';
+import AuthSteam from '../auth/Auth';
 import {
   syncLibrary,
-  deleteAppData, gamesCount as gamesCounter,
+  deleteAppData,
+  gamesCount as gamesCounter,
 } from './syncSlice';
 
 export default function Sync() {
@@ -31,7 +33,7 @@ export default function Sync() {
         Sync Steam Library
       </button>
       {gamesCount}
-      <br/>
+      <br />
       <button
         className={styles.btn}
         onClick={() => {
@@ -42,6 +44,18 @@ export default function Sync() {
         aria-label="Sync Steam Library"
       >
         Delete Synced data
+      </button>
+      <br />
+      <button
+        className={styles.btn}
+        onClick={() => {
+          AuthSteam();
+        }}
+        data-tclass="btn"
+        type="button"
+        aria-label="Sync Steam Library"
+      >
+        Link steam account
       </button>
     </div>
   );

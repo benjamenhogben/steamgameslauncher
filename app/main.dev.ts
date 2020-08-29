@@ -11,7 +11,7 @@
 import 'core-js/stable';
 import 'regenerator-runtime/runtime';
 import path from 'path';
-import { app, BrowserWindow } from 'electron';
+import { app, BrowserWindow, ipcMain } from 'electron';
 import { autoUpdater } from 'electron-updater';
 import log from 'electron-log';
 import MenuBuilder from './menu';
@@ -25,6 +25,7 @@ export default class AppUpdater {
 }
 
 let mainWindow: BrowserWindow | null = null;
+let authWindow: BrowserWindow | null = null;
 
 if (process.env.NODE_ENV === 'production') {
   const sourceMapSupport = require('source-map-support');
@@ -91,6 +92,7 @@ const createWindow = async () => {
   });
 
   mainWindow.on('closed', () => {
+    authWindow = null;
     mainWindow = null;
   });
 
@@ -101,6 +103,39 @@ const createWindow = async () => {
   // eslint-disable-next-line
   new AppUpdater();
 };
+
+ipcMain.on('newAuthWindow', (event, args) => {
+  if (args.type === 'beginAuth') {
+    authWindow = new BrowserWindow({
+      frame: false,
+      titleBarStyle: 'hiddenInset',
+      parent: mainWindow,
+      modal: true,
+      show: false,
+      width: 800,
+      height: 600,
+      webPreferences:
+        (process.env.NODE_ENV === 'development' ||
+          process.env.E2E_BUILD === 'true') &&
+        process.env.ERB_SECURE !== 'true'
+          ? {
+              nodeIntegration: true,
+            }
+          : {
+              preload: path.join(__dirname, 'dist/renderer.prod.js'),
+            },
+    });
+    authWindow.loadURL('https://steambed.test/user/login');
+    authWindow.once('ready-to-show', () => {
+      authWindow?.show();
+    });
+    authWindow.on('close', () => {
+      mainWindow?.focus();
+      authWindow = null;
+    });
+  }
+  event.returnValue = 'received';
+});
 
 /**
  * Add event listeners...
