@@ -1,0 +1,24 @@
+.menuWrapper {
+  display: flex;
+  justify-content: space-between;
+  background: red;
+}
+
+.draggable {
+  -webkit-app-region: drag;
+  user-select: none;
+  width: 100%;
+}
+
+.windowControls {
+  -webkit-app-region: no-drag;
+  display: flex;
+}
+
+.noSelectButton {
+  appearance: none;
+  background: blue;
+  color: white;
+  user-select: none;
+  cursor: pointer;
+}
