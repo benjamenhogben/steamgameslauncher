@@ -1,9 +1,10 @@
-import { createSlice, createReducer, CombinedState, Dispatch } from '@reduxjs/toolkit';
+import { createSlice, CombinedState, Dispatch } from '@reduxjs/toolkit';
 import * as child from 'child_process';
 import * as VDF from '@node-steam/vdf';
 import fs from 'fs';
 import { History } from 'history';
 import { RouterState } from 'connected-react-router';
+import { saveSampleState } from '../../utils/localStorage';
 // eslint-disable-next-line import/no-cycle
 import { AppThunk, RootState } from '../../store';
 
@@ -193,10 +194,15 @@ export const syncLibrary = (): AppThunk => (dispatch, getState) => {
     .then((data: string[]) => {
       return getInstalledGames(dispatch, getState, data);
     })
+    .then(() => {
+      dispatch(loading());
+      saveSampleState(getState().sync);
+      return true;
+    })
     .catch((e) => {
+      dispatch(loading());
       console.error(e);
     });
-  dispatch(loading());
 };
 
 export const deleteAppData = (): AppThunk => (dispatch) => {
@@ -213,4 +219,9 @@ export default syncSlice.reducer;
 
 export const gamesCount = (state: RootState) => state.sync.games.length;
 
-export const gamesList = (state: RootState) => state.sync.games;
+export const gamesList = (state: RootState, sortOrder = undefined) => {
+  const sortedGames = state.sync.games
+    .slice()
+    .sort((a, b) => (a.name > b.name ? 1 : -1));
+  return sortedGames;
+};

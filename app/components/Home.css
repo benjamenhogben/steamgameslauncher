@@ -21,7 +21,7 @@
   grid-auto-rows: 1fr;
 }
 
-.game {
+.gameTile {
   display: flex;
   align-items: center;
   justify-content: center;
