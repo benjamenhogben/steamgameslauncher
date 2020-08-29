@@ -24,7 +24,7 @@ items.sort(function(a, b) {
 
 export default function Home(): JSX.Element {
   const listItems = useSelector(gamesList).map((game) => (
-    <div className={styles.game} key={game.appid}>
+    <div className={styles.gameTile} key={game.appid}>
       <a href={`steam://run/${game.appid}`}>{game.name}</a>
     </div>
   ));

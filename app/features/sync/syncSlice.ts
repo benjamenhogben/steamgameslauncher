@@ -1,9 +1,10 @@
-import { createSlice, createReducer, CombinedState, Dispatch } from '@reduxjs/toolkit';
+import { createSlice, CombinedState, Dispatch } from '@reduxjs/toolkit';
 import * as child from 'child_process';
 import * as VDF from '@node-steam/vdf';
 import fs from 'fs';
 import { History } from 'history';
 import { RouterState } from 'connected-react-router';
+import { saveSampleState, loadSampleState } from '../../utils/localStorage';
 // eslint-disable-next-line import/no-cycle
 import { AppThunk, RootState } from '../../store';
 
@@ -37,6 +38,11 @@ const syncSlice = createSlice({
       state.installLocation = '';
       state.libraryFolders = [];
     },
+    forceLoadState: (state, action) => {
+      state.games = action.payload.games;
+      state.installLocation = action.payload.installLocation;
+      state.libraryFolders = action.payload.libraryFolders;
+    },
   },
 });
 
@@ -46,6 +52,7 @@ export const {
   addLibraryFolder,
   addGame,
   deleteLibrary,
+  forceLoadState,
 } = syncSlice.actions;
 
 const getInstalledGames = (
@@ -79,7 +86,7 @@ const getInstalledGames = (
             ).AppState;
             const exists = (list: any[], obj: any) => {
               let i: number;
-              for (i = 0; i < list.length; i++) {
+              for (i = 0; i < list.length; i += 1) {
                 if (list[i].appid === obj.appid) {
                   return true;
                 }
@@ -186,6 +193,11 @@ const getInstallLocation = (
 
 export const syncLibrary = (): AppThunk => (dispatch, getState) => {
   dispatch(loading());
+  if (process.platform === 'linux') {
+    dispatch(forceLoadState(loadSampleState()));
+    dispatch(loading());
+    return;
+  }
   getInstallLocation(dispatch, getState)
     .then((data: string) => {
       return getLibraryFolders(dispatch, getState, data);
@@ -193,10 +205,15 @@ export const syncLibrary = (): AppThunk => (dispatch, getState) => {
     .then((data: string[]) => {
       return getInstalledGames(dispatch, getState, data);
     })
+    .then(() => {
+      dispatch(loading());
+      saveSampleState(getState().sync);
+      return true;
+    })
     .catch((e) => {
+      dispatch(loading());
       console.error(e);
     });
-  dispatch(loading());
 };
 
 export const deleteAppData = (): AppThunk => (dispatch) => {
@@ -213,4 +230,9 @@ export default syncSlice.reducer;
 
 export const gamesCount = (state: RootState) => state.sync.games.length;
 
-export const gamesList = (state: RootState) => state.sync.games;
+export const gamesList = (state: RootState, sortOrder = undefined) => {
+  const sortedGames = state.sync.games
+    .slice()
+    .sort((a, b) => (a.name > b.name ? 1 : -1));
+  return sortedGames;
+};
