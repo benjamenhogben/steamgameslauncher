@@ -11,7 +11,7 @@
 import 'core-js/stable';
 import 'regenerator-runtime/runtime';
 import path from 'path';
-import { app, BrowserWindow, ipcMain } from 'electron';
+import { app, BrowserWindow, ipcMain, session } from 'electron';
 import { autoUpdater } from 'electron-updater';
 import log from 'electron-log';
 import MenuBuilder from './menu';
@@ -32,11 +32,21 @@ if (process.env.NODE_ENV === 'production') {
   sourceMapSupport.install();
 }
 
+let SteamAuthUri = 'https://api.benhogben.dev/api/steamAuth/';
+
 if (
   process.env.NODE_ENV === 'development' ||
   process.env.DEBUG_PROD === 'true'
 ) {
   require('electron-debug')();
+  app.on('ready', () => {
+    app.commandLine.appendSwitch('ignore-certificate-errors', 'true');
+    app.commandLine.appendSwitch('allow-insecure-localhost', 'true');
+    session.defaultSession.setCertificateVerifyProc((req, callback) => {
+      callback(0);
+    });
+  });
+  SteamAuthUri = 'https://steambed.test/api/steamAuth/';
 }
 
 const installExtensions = async () => {
@@ -107,26 +117,32 @@ const createWindow = async () => {
 ipcMain.on('newAuthWindow', (event, args) => {
   if (args.type === 'beginAuth') {
     authWindow = new BrowserWindow({
-      frame: false,
-      titleBarStyle: 'hiddenInset',
+      title: 'Log in to your Steam account',
+      frame: true,
+      titleBarStyle: 'default',
       parent: mainWindow,
       modal: true,
       show: false,
       width: 800,
       height: 600,
-      webPreferences:
-        (process.env.NODE_ENV === 'development' ||
-          process.env.E2E_BUILD === 'true') &&
-        process.env.ERB_SECURE !== 'true'
-          ? {
-              nodeIntegration: true,
-            }
-          : {
-              preload: path.join(__dirname, 'dist/renderer.prod.js'),
-            },
+      'web-security': false,
     });
-    authWindow.loadURL('https://steambed.test/user/login');
+    authWindow.loadURL(SteamAuthUri);
+    const { webContents } = authWindow;
+
+    webContents.on('will-redirect', (e, newUrl) => {
+      // console.log(`${newUrl}`);
+      const urlReg = new RegExp(`${SteamAuthUri}callback`);
+      const idRegex = /(Fopenid%2Fid%2F)(\d+)/;
+      if (urlReg.test(newUrl)) {
+        const steamId = idRegex.exec(newUrl);
+        // console.log(steamId[2]);
+        // do something with steamId[2]
+        authWindow?.hide();
+      }
+    });
     authWindow.once('ready-to-show', () => {
+      authWindow?.focus();
       authWindow?.show();
     });
     authWindow.on('close', () => {
