@@ -125,17 +125,37 @@ ipcMain.on('newAuthWindow', (event, args) => {
       show: false,
       width: 800,
       height: 600,
-      'web-security': false,
     });
-    authWindow.loadURL(SteamAuthUri);
-    const { webContents } = authWindow;
+    authWindow?.loadURL(SteamAuthUri, {
+      postData: [
+        {
+          type: 'postData',
+          bytes: Buffer.from('force=post'),
+        },
+      ],
+    });
+    const webContents = authWindow?.webContents;
 
-    webContents.on('will-redirect', (e, newUrl) => {
+    webContents.on('will-redirect', (e: Event, newUrl: string) => {
       // console.log(`${newUrl}`);
       const urlReg = new RegExp(`${SteamAuthUri}callback`);
       const idRegex = /(Fopenid%2Fid%2F)(\d+)/;
       if (urlReg.test(newUrl)) {
-        const steamId = idRegex.exec(newUrl);
+        try {
+          const steamId = idRegex.exec(newUrl)[2];
+          event.reply('auth-window-closed', {
+            id: steamId,
+            err: false,
+            message: 'Logged in successfully',
+          });
+        } catch (error) {
+          console.error(error);
+          event.reply('auth-window-closed', {
+            id: undefined,
+            err: true,
+            message: 'Sorry could not confirm Steam User ID - please try again',
+          });
+        }
         // console.log(steamId[2]);
         // do something with steamId[2]
         authWindow?.hide();
@@ -150,7 +170,6 @@ ipcMain.on('newAuthWindow', (event, args) => {
       authWindow = null;
     });
   }
-  event.returnValue = 'received';
 });
 
 /**

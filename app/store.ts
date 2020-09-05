@@ -43,9 +43,7 @@ export const configuredStore = (initialState?: RootState) => {
     );
   }
   store.subscribe(() => {
-    saveState({
-      sync: store.getState().sync,
-    });
+    saveState(store.getState());
   });
   return store;
 };
