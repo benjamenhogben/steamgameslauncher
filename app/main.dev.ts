@@ -11,7 +11,7 @@
 import 'core-js/stable';
 import 'regenerator-runtime/runtime';
 import path from 'path';
-import { app, BrowserWindow } from 'electron';
+import { app, BrowserWindow, ipcMain, session } from 'electron';
 import { autoUpdater } from 'electron-updater';
 import log from 'electron-log';
 import MenuBuilder from './menu';
@@ -25,17 +25,28 @@ export default class AppUpdater {
 }
 
 let mainWindow: BrowserWindow | null = null;
+let authWindow: BrowserWindow | null = null;
 
 if (process.env.NODE_ENV === 'production') {
   const sourceMapSupport = require('source-map-support');
   sourceMapSupport.install();
 }
 
+let SteamAuthUri = 'https://api.benhogben.dev/api/steamAuth/';
+
 if (
   process.env.NODE_ENV === 'development' ||
   process.env.DEBUG_PROD === 'true'
 ) {
   require('electron-debug')();
+  app.on('ready', () => {
+    app.commandLine.appendSwitch('ignore-certificate-errors', 'true');
+    app.commandLine.appendSwitch('allow-insecure-localhost', 'true');
+    session.defaultSession.setCertificateVerifyProc((req, callback) => {
+      callback(0);
+    });
+  });
+  SteamAuthUri = 'https://steambed.test/api/steamAuth/';
 }
 
 const installExtensions = async () => {
@@ -91,6 +102,7 @@ const createWindow = async () => {
   });
 
   mainWindow.on('closed', () => {
+    authWindow = null;
     mainWindow = null;
   });
 
@@ -101,6 +113,64 @@ const createWindow = async () => {
   // eslint-disable-next-line
   new AppUpdater();
 };
+
+ipcMain.on('newAuthWindow', (event, args) => {
+  if (args.type === 'beginAuth') {
+    authWindow = new BrowserWindow({
+      title: 'Log in to your Steam account',
+      frame: true,
+      titleBarStyle: 'default',
+      parent: mainWindow,
+      modal: true,
+      show: false,
+      width: 800,
+      height: 600,
+    });
+    authWindow?.loadURL(SteamAuthUri, {
+      postData: [
+        {
+          type: 'postData',
+          bytes: Buffer.from('force=post'),
+        },
+      ],
+    });
+    const webContents = authWindow?.webContents;
+
+    webContents.on('will-redirect', (e: Event, newUrl: string) => {
+      // console.log(`${newUrl}`);
+      const urlReg = new RegExp(`${SteamAuthUri}callback`);
+      const idRegex = /(Fopenid%2Fid%2F)(\d+)/;
+      if (urlReg.test(newUrl)) {
+        try {
+          const steamId = idRegex.exec(newUrl)[2];
+          event.reply('auth-window-closed', {
+            id: steamId,
+            err: false,
+            message: 'Logged in successfully',
+          });
+        } catch (error) {
+          console.error(error);
+          event.reply('auth-window-closed', {
+            id: undefined,
+            err: true,
+            message: 'Sorry could not confirm Steam User ID - please try again',
+          });
+        }
+        // console.log(steamId[2]);
+        // do something with steamId[2]
+        authWindow?.hide();
+      }
+    });
+    authWindow.once('ready-to-show', () => {
+      authWindow?.focus();
+      authWindow?.show();
+    });
+    authWindow.on('close', () => {
+      mainWindow?.focus();
+      authWindow = null;
+    });
+  }
+});
 
 /**
  * Add event listeners...

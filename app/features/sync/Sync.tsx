@@ -5,7 +5,8 @@ import styles from './Sync.css';
 import routes from '../../constants/routes.json';
 import {
   syncLibrary,
-  deleteAppData, gamesCount as gamesCounter,
+  deleteAppData,
+  gamesCount as gamesCounter,
 } from './syncSlice';
 
 export default function Sync() {
@@ -31,7 +32,7 @@ export default function Sync() {
         Sync Steam Library
       </button>
       {gamesCount}
-      <br/>
+      <br />
       <button
         className={styles.btn}
         onClick={() => {

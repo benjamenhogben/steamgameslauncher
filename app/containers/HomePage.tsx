@@ -1,7 +1,7 @@
 import React from 'react';
 import Home from '../components/Home';
 import Menu from '../components/Menu';
-import styles from './container.css';
+import styles from './Container.css';
 
 export default function HomePage() {
   return (

@@ -1,12 +1,14 @@
-import { createSlice, CombinedState, Dispatch } from '@reduxjs/toolkit';
-import * as child from 'child_process';
-import * as VDF from '@node-steam/vdf';
-import fs from 'fs';
-import { History } from 'history';
-import { RouterState } from 'connected-react-router';
-import { saveSampleState } from '../../utils/localStorage';
+import { createSlice } from '@reduxjs/toolkit';
+import { saveState, loadSampleState } from '../../utils/localStorage';
 // eslint-disable-next-line import/no-cycle
 import { AppThunk, RootState } from '../../store';
+import authSteam from '../steamApi/Auth';
+// eslint-disable-next-line import/no-cycle
+import {
+  setInstallLocation,
+  setInstalledGames,
+  setLibraryFolders,
+} from './libraryActions';
 
 const syncSlice = createSlice({
   name: 'syncedData',
@@ -14,17 +16,18 @@ const syncSlice = createSlice({
     games: <any[]>[],
     installLocation: <string>'',
     libraryFolders: <string[]>[],
-    loading: <string>'idle',
+    loading: <boolean>false,
+    userId: <string>'',
   },
   reducers: {
     loading(state) {
-      if (state.loading === 'idle') {
-        state.loading = 'pending';
+      if (state.loading === true) {
+        state.loading = false;
       } else {
-        state.loading = 'idle';
+        state.loading = true;
       }
     },
-    setInstallLocation: (state, action) => {
+    addInstallLocation: (state, action) => {
       state.installLocation = action.payload;
     },
     addLibraryFolder: (state, action) => {
@@ -38,170 +41,78 @@ const syncSlice = createSlice({
       state.installLocation = '';
       state.libraryFolders = [];
     },
+    forceLoadState: (state, action) => {
+      state.games = action.payload.games;
+      state.installLocation = action.payload.installLocation;
+      state.libraryFolders = action.payload.libraryFolders;
+    },
+    setUserId: (state, action) => {
+      state.userId = action.payload;
+    },
   },
 });
 
 export const {
   loading,
-  setInstallLocation,
+  addInstallLocation,
   addLibraryFolder,
   addGame,
   deleteLibrary,
+  forceLoadState,
+  setUserId,
 } = syncSlice.actions;
-
-const getInstalledGames = (
-  dispatch: Dispatch,
-  getState: () => CombinedState<{
-    router: RouterState<History.UnknownFacade>;
-    counter: {
-      value: number;
-    };
-    sync: {
-      loading: string;
-      installLocation: string;
-      libraryFolders: string[];
-      games: string[];
-    };
-  }>,
-  paths: string[]
-) => {
-  return new Promise((resolve, reject) => {
-    const fnregex = /appmanifest_[0-9]*.acf/g;
-    try {
-      paths.forEach((installLocation) => {
-        let games = fs.readdirSync(`${installLocation}/SteamApps`);
-        games = games.filter((fn) => fn.match(fnregex));
-        games.forEach((file) => {
-          try {
-            const str = VDF.parse(
-              fs
-                .readFileSync(`${installLocation}/SteamApps/${file}`)
-                .toString('utf-8')
-            ).AppState;
-            const exists = (list: any[], obj: any) => {
-              let i: number;
-              for (i = 0; i < list.length; i++) {
-                if (list[i].appid === obj.appid) {
-                  return true;
-                }
-              }
-
-              return false;
-            };
-            if (
-              !exists(getState().sync.games, str) &&
-              Object.keys(str).length > 0 &&
-              str.installdir !== 'Steamworks Shared'
-            ) {
-              dispatch(addGame(str));
-            }
-          } catch (error) {
-            console.error(`${file}: ${error}`);
-          }
-        });
-      });
-      resolve(getState().sync.games);
-    } catch (error) {
-      reject(error);
-    }
-  });
-};
-
-const getLibraryFolders = (
-  dispatch: Dispatch,
-  getState: () => CombinedState<{
-    router: RouterState<History.UnknownFacade>;
-    counter: {
-      value: number;
-    };
-    sync: {
-      loading: string;
-      installLocation: string;
-      libraryFolders: string[];
-      games: string[];
-    };
-  }>,
-  path: string
-) => {
-  return new Promise<string[]>((resolve, reject) => {
-    try {
-      dispatch(addLibraryFolder(`${path}`));
-      const libraries = VDF.parse(
-        fs
-          .readFileSync(`${path}\\steamapps\\libraryfolders.vdf`)
-          .toString('utf-8')
-      );
-      Object.values<string>(libraries.LibraryFolders).forEach((lib) => {
-        const regex = /[a-z]:\\\\/gis;
-        if (
-          regex.test(lib) &&
-          getState().sync.libraryFolders.indexOf(lib) < 0
-        ) {
-          dispatch(addLibraryFolder(lib));
-        }
-      });
-      resolve(getState().sync.libraryFolders);
-    } catch (error) {
-      reject(error);
-    }
-  });
-};
-
-const getInstallLocation = (
-  dispatch: Dispatch,
-  getState: () => CombinedState<{
-    router: RouterState<History.UnknownFacade>;
-    counter: {
-      value: number;
-    };
-    sync: {
-      loading: string;
-      installLocation: string;
-      libraryFolders: string[];
-      games: string[];
-    };
-  }>
-) => {
-  return new Promise((resolve: (value: string) => void, reject) => {
-    try {
-      const registryQuery = child.execSync(
-        'reg query "HKEY_LOCAL_MACHINE\\SOFTWARE\\WOW6432Node\\Valve\\Steam" /v InstallPath'
-      );
-      const dataFormatted = registryQuery.toString().trim().split('    ');
-      const regex = /[a-z]:\\Steam/gis;
-      if (
-        dataFormatted.length >= 4 &&
-        dataFormatted[2] === 'REG_SZ' &&
-        regex.test(dataFormatted[3])
-      ) {
-        if (getState().sync.installLocation.indexOf(dataFormatted[3]) < 0) {
-          dispatch(setInstallLocation(dataFormatted[3]));
-        }
-        resolve(getState().sync.installLocation);
-      }
-    } catch (error) {
-      reject(error);
-    }
-  });
-};
 
 export const syncLibrary = (): AppThunk => (dispatch, getState) => {
   dispatch(loading());
-  getInstallLocation(dispatch, getState)
+  authSteam()
+    .then((data: SteamAuth) => {
+      dispatch(setUserId(data.id));
+      if (process.platform !== 'win32') {
+        dispatch(forceLoadState(loadSampleState()));
+        throw new Error(
+          "Your platform isn't supported yet! Stay tuned for more info."
+        );
+      }
+      return true;
+    })
+    .then(() => {
+      if (getState().sync.userId) {
+        return true;
+      }
+      throw new Error(
+        'Something went wrong authorising with Steam, please try again!'
+      );
+    })
+    .then(() => {
+      return setInstallLocation(dispatch, getState);
+    })
     .then((data: string) => {
-      return getLibraryFolders(dispatch, getState, data);
+      return setLibraryFolders(dispatch, getState, data);
     })
     .then((data: string[]) => {
-      return getInstalledGames(dispatch, getState, data);
+      return setInstalledGames(dispatch, getState, data);
+    })
+    .then(() => {
+      /**
+       * TODO: Get Steam Api user and game data
+       */
+      return true;
     })
     .then(() => {
       dispatch(loading());
-      saveSampleState(getState().sync);
+      saveState(getState().sync);
+      return true;
+    })
+    .then(() => {
+      dispatch(loading());
+      saveState(getState().sync);
       return true;
     })
     .catch((e) => {
       dispatch(loading());
       console.error(e);
+      dispatch(loading());
+      return false;
     });
 };
 
@@ -217,11 +128,17 @@ export const deleteAppData = (): AppThunk => (dispatch) => {
 
 export default syncSlice.reducer;
 
-export const gamesCount = (state: RootState) => state.sync.games.length;
+export const gamesCount = (state: RootState) =>
+  state.sync.games ? state.sync.games.length : 0;
 
 export const gamesList = (state: RootState, sortOrder = undefined) => {
-  const sortedGames = state.sync.games
-    .slice()
-    .sort((a, b) => (a.name > b.name ? 1 : -1));
-  return sortedGames;
+  try {
+    const sortedGames = state.sync.games
+      .slice()
+      .sort((a, b) => (a.name > b.name ? 1 : -1));
+    return sortedGames;
+  } catch (error) {
+    console.error(error);
+    return false;
+  }
 };
